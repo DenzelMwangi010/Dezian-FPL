@@ -1,0 +1,824 @@
+<html>
+import React, { useState, useEffect, useMemo } from 'react';
+import { 
+  Users, 
+  Search, 
+  Zap, 
+  Calendar, 
+  TrendingUp, 
+  Sparkles, 
+  ShieldAlert, 
+  HelpCircle, 
+  RefreshCw, 
+  Plus, 
+  Trash2, 
+  Check, 
+  SlidersHorizontal,
+  ChevronDown,
+  Award,
+  Crown,
+  ChevronRight,
+  Info,
+  X,
+  Shuffle,
+  Activity,
+  AlertTriangle,
+  UserCheck,
+  LogOut,
+  LogIn,
+  UserPlus,
+  Save,
+  Download,
+  Lock,
+  Flame,
+  CheckCircle2,
+  XCircle,
+  MessageSquare,
+  Send,
+  BarChart2,
+  Percent,
+  Target,
+  ShieldCheck,
+  PieChart,
+  BookOpen
+} from 'lucide-react';
+
+// --- FIREBASE IMPORTS ---
+import { initializeApp } from 'firebase/app';
+import { 
+  getAuth, 
+  signInAnonymously, 
+  signInWithCustomToken, 
+  onAuthStateChanged,
+  createUserWithEmailAndPassword,
+  signInWithEmailAndPassword,
+  signOut
+} from 'firebase/auth';
+import { 
+  getFirestore, 
+  doc, 
+  getDoc, 
+  setDoc, 
+  onSnapshot 
+} from 'firebase/firestore';
+
+// --- FIREBASE INITIALIZATION ---
+let app, auth, db;
+const appId = typeof __app_id !== 'undefined' ? __app_id : 'fpl-prep-hub-v2';
+
+try {
+  if (typeof __firebase_config !== 'undefined' && __firebase_config) {
+    const firebaseConfig = JSON.parse(__firebase_config);
+    app = initializeApp(firebaseConfig);
+    auth = getAuth(app);
+    db = getFirestore(app);
+  }
+} catch (err) {
+  console.warn("Firebase initialization skipped or failed, using local fallback state.", err);
+}
+
+// --- FALLBACK MOCK DATA FOR 2026/2027 SEASON ---
+const TEAMS_DATA = [
+  { id: 1, name: 'Arsenal', short_name: 'ARS' },
+  { id: 2, name: 'Aston Villa', short_name: 'AVL' },
+  { id: 3, name: 'Bournemouth', short_name: 'BOU' },
+  { id: 4, name: 'Brentford', short_name: 'BRE' },
+  { id: 5, name: 'Brighton', short_name: 'BHA' },
+  { id: 6, name: 'Chelsea', short_name: 'CHE' },
+  { id: 7, name: 'Crystal Palace', short_name: 'CRY' },
+  { id: 8, name: 'Everton', short_name: 'EVE' },
+  { id: 9, name: 'Fulham', short_name: 'FUL' },
+  { id: 10, name: 'Ipswich', short_name: 'IPS' },
+  { id: 11, name: 'Leicester', short_name: 'LEI' },
+  { id: 12, name: 'Liverpool', short_name: 'LIV' },
+  { id: 13, name: 'Man City', short_name: 'MCI' },
+  { id: 14, name: 'Man Utd', short_name: 'MUN' },
+  { id: 15, name: 'Newcastle', short_name: 'NEW' },
+  { id: 16, name: 'Nott\'m Forest', short_name: 'NFO' },
+  { id: 17, name: 'Southampton', short_name: 'SOU' },
+  { id: 18, name: 'Tottenham', short_name: 'TOT' },
+  { id: 19, name: 'West Ham', short_name: 'WHU' },
+  { id: 20, name: 'Wolves', short_name: 'WOL' },
+];
+
+const DEFAULT_STARTING_SQUAD = [101, 201, 202, 203, 301, 302, 303, 304, 305, 401, 402];
+const DEFAULT_BENCH_SQUAD = [102, 205, 206, 404];
+
+const INITIAL_FALLBACK_PLAYERS = [
+  // GKs
+  { id: 101, web_name: 'Raya', team_code: 'ARS', team: 'ARS', element_type: 1, pos: 'GK', now_cost: 5.5, form: '6.8', total_points: 62, selected_by_percent: '31.2', status: 'a', chance_of_playing_next_round: 100, news: '', xG: '0.00', xA: '0.02', xGI: '0.02', xP: '5.8', csOdds: '58%', penTaker: false, nextFixtures: [ { opp: 'LEI (H)', diff: 2 }, { opp: 'SOU (A)', diff: 2 }, { opp: 'BOU (A)', diff: 2 }, { opp: 'LIV (H)', diff: 4 } ] },
+  { id: 102, web_name: 'Pickford', team_code: 'EVE', team: 'EVE', element_type: 1, pos: 'GK', now_cost: 4.8, form: '5.2', total_points: 48, selected_by_percent: '14.5', status: 'a', chance_of_playing_next_round: 100, news: '', xG: '0.00', xA: '0.00', xGI: '0.00', xP: '4.2', csOdds: '34%', penTaker: false, nextFixtures: [ { opp: 'CRY (H)', diff: 2 }, { opp: 'NEW (H)', diff: 3 }, { opp: 'IPS (A)', diff: 2 }, { opp: 'FUL (H)', diff: 3 } ] },
+  { id: 103, web_name: 'Flekken', team_code: 'BRE', team: 'BRE', element_type: 1, pos: 'GK', now_cost: 4.5, form: '4.4', total_points: 42, selected_by_percent: '18.1', status: 'd', chance_of_playing_next_round: 75, news: 'Minor ankle strain - 75% chance of playing', xG: '0.00', xA: '0.01', xGI: '0.01', xP: '3.6', csOdds: '28%', penTaker: false, nextFixtures: [ { opp: 'WHU (H)', diff: 3 }, { opp: 'WOL (A)', diff: 2 }, { opp: 'MUN (A)', diff: 4 }, { opp: 'IPS (H)', diff: 2 } ] },
+  { id: 104, web_name: 'Sels', team_code: 'NFO', team: 'NFO', element_type: 1, pos: 'GK', now_cost: 4.6, form: '5.9', total_points: 55, selected_by_percent: '12.0', status: 'a', chance_of_playing_next_round: 100, news: '', xG: '0.00', xA: '0.00', xGI: '0.00', xP: '4.5', csOdds: '40%', penTaker: false, nextFixtures: [ { opp: 'FUL (H)', diff: 3 }, { opp: 'CHE (A)', diff: 4 }, { opp: 'CRY (H)', diff: 2 }, { opp: 'LEI (A)', diff: 2 } ] },
+
+  // DEFs
+  { id: 201, web_name: 'Alexander-Arnold', team_code: 'LIV', team: 'LIV', element_type: 2, pos: 'DEF', now_cost: 7.1, form: '7.2', total_points: 68, selected_by_percent: '33.4', status: 'a', chance_of_playing_next_round: 100, news: '', xG: '0.12', xA: '0.38', xGI: '0.50', xP: '6.4', csOdds: '46%', penTaker: false, nextFixtures: [ { opp: 'WOL (A)', diff: 2 }, { opp: 'CRY (A)', diff: 3 }, { opp: 'CHE (H)', diff: 4 }, { opp: 'ARS (A)', diff: 5 } ] },
+  { id: 202, web_name: 'Gabriel', team_code: 'ARS', team: 'ARS', element_type: 2, pos: 'DEF', now_cost: 6.2, form: '7.6', total_points: 71, selected_by_percent: '39.8', status: 'a', chance_of_playing_next_round: 100, news: '', xG: '0.24', xA: '0.05', xGI: '0.29', xP: '6.9', csOdds: '58%', penTaker: false, nextFixtures: [ { opp: 'LEI (H)', diff: 2 }, { opp: 'SOU (A)', diff: 2 }, { opp: 'BOU (A)', diff: 2 }, { opp: 'LIV (H)', diff: 4 } ] },
+  { id: 203, web_name: 'Gvardiol', team_code: 'MCI', team: 'MCI', element_type: 2, pos: 'DEF', now_cost: 6.0, form: '6.1', total_points: 56, selected_by_percent: '27.5', status: 'a', chance_of_playing_next_round: 100, news: '', xG: '0.18', xA: '0.12', xGI: '0.30', xP: '5.5', csOdds: '52%', penTaker: false, nextFixtures: [ { opp: 'NEW (A)', diff: 3 }, { opp: 'FUL (H)', diff: 2 }, { opp: 'WOL (A)', diff: 2 }, { opp: 'SOU (H)', diff: 1 } ] },
+  { id: 204, web_name: 'Pedro Porro', team_code: 'TOT', team: 'TOT', element_type: 2, pos: 'DEF', now_cost: 5.5, form: '5.0', total_points: 49, selected_by_percent: '29.1', status: 'd', chance_of_playing_next_round: 50, news: 'Tight hamstring - 50% chance of playing', xG: '0.10', xA: '0.22', xGI: '0.32', xP: '3.1', csOdds: '31%', penTaker: false, nextFixtures: [ { opp: 'MUN (A)', diff: 4 }, { opp: 'BHA (A)', diff: 3 }, { opp: 'WHU (H)', diff: 3 }, { opp: 'CRY (A)', diff: 2 } ] },
+  { id: 205, web_name: 'Konsa', team_code: 'AVL', team: 'AVL', element_type: 2, pos: 'DEF', now_cost: 4.5, form: '4.2', total_points: 38, selected_by_percent: '11.8', status: 'a', chance_of_playing_next_round: 100, news: '', xG: '0.04', xA: '0.02', xGI: '0.06', xP: '3.8', csOdds: '36%', penTaker: false, nextFixtures: [ { opp: 'IPS (A)', diff: 2 }, { opp: 'MUN (H)', diff: 3 }, { opp: 'FUL (A)', diff: 3 }, { opp: 'BOU (H)', diff: 2 } ] },
+  { id: 206, web_name: 'Greaves', team_code: 'IPS', team: 'IPS', element_type: 2, pos: 'DEF', now_cost: 4.0, form: '3.5', total_points: 28, selected_by_percent: '9.4', status: 'a', chance_of_playing_next_round: 100, news: '', xG: '0.05', xA: '0.01', xGI: '0.06', xP: '2.5', csOdds: '20%', penTaker: false, nextFixtures: [ { opp: 'AVL (H)', diff: 3 }, { opp: 'WHU (A)', diff: 3 }, { opp: 'EVE (H)', diff: 2 }, { opp: 'BRE (A)', diff: 3 } ] },
+
+  // MIDs
+  { id: 301, web_name: 'Salah', team_code: 'LIV', team: 'LIV', element_type: 3, pos: 'MID', now_cost: 12.7, form: '9.1', total_points: 95, selected_by_percent: '48.9', status: 'a', chance_of_playing_next_round: 100, news: '', xG: '0.68', xA: '0.35', xGI: '1.03', xP: '8.4', csOdds: 'N/A', penTaker: true, nextFixtures: [ { opp: 'WOL (A)', diff: 2 }, { opp: 'CRY (A)', diff: 3 }, { opp: 'CHE (H)', diff: 4 }, { opp: 'ARS (A)', diff: 5 } ] },
+  { id: 302, web_name: 'Saka', team_code: 'ARS', team: 'ARS', element_type: 3, pos: 'MID', now_cost: 10.1, form: '8.3', total_points: 84, selected_by_percent: '36.4', status: 'a', chance_of_playing_next_round: 100, news: '', xG: '0.42', xA: '0.45', xGI: '0.87', xP: '7.8', csOdds: 'N/A', penTaker: true, nextFixtures: [ { opp: 'LEI (H)', diff: 2 }, { opp: 'SOU (A)', diff: 2 }, { opp: 'BOU (A)', diff: 2 }, { opp: 'LIV (H)', diff: 4 } ] },
+  { id: 303, web_name: 'Palmer', team_code: 'CHE', team: 'CHE', element_type: 3, pos: 'MID', now_cost: 10.8, form: '9.4', total_points: 98, selected_by_percent: '56.2', status: 'a', chance_of_playing_next_round: 100, news: '', xG: '0.58', xA: '0.41', xGI: '0.99', xP: '8.9', csOdds: 'N/A', penTaker: true, nextFixtures: [ { opp: 'BHA (H)', diff: 3 }, { opp: 'NFO (H)', diff: 2 }, { opp: 'LIV (A)', diff: 5 }, { opp: 'NEW (H)', diff: 3 } ] },
+  { id: 304, web_name: 'Mbeumo', team_code: 'BRE', team: 'BRE', element_type: 3, pos: 'MID', now_cost: 7.6, form: '7.8', total_points: 72, selected_by_percent: '34.7', status: 'a', chance_of_playing_next_round: 100, news: '', xG: '0.48', xA: '0.22', xGI: '0.70', xP: '6.7', csOdds: 'N/A', penTaker: true, nextFixtures: [ { opp: 'WHU (H)', diff: 3 }, { opp: 'WOL (A)', diff: 2 }, { opp: 'MUN (A)', diff: 4 }, { opp: 'IPS (H)', diff: 2 } ] },
+  { id: 305, web_name: 'Rogers', team_code: 'AVL', team: 'AVL', element_type: 3, pos: 'MID', now_cost: 5.4, form: '6.1', total_points: 46, selected_by_percent: '24.1', status: 'a', chance_of_playing_next_round: 100, news: '', xG: '0.28', xA: '0.19', xGI: '0.47', xP: '5.1', csOdds: 'N/A', penTaker: false, nextFixtures: [ { opp: 'IPS (A)', diff: 2 }, { opp: 'MUN (H)', diff: 3 }, { opp: 'FUL (A)', diff: 3 }, { opp: 'BOU (H)', diff: 2 } ] },
+  { id: 306, web_name: 'Odegaard', team_code: 'ARS', team: 'ARS', element_type: 3, pos: 'MID', now_cost: 8.2, form: '2.1', total_points: 22, selected_by_percent: '5.1', status: 'i', chance_of_playing_next_round: 0, news: 'Ankle Ligament Injury - Expected back late November', xG: '0.15', xA: '0.25', xGI: '0.40', xP: '0.0', csOdds: 'N/A', penTaker: false, nextFixtures: [ { opp: 'LEI (H)', diff: 2 }, { opp: 'SOU (A)', diff: 2 }, { opp: 'BOU (A)', diff: 2 }, { opp: 'LIV (H)', diff: 4 } ] },
+  { id: 307, web_name: 'Semenyo', team_code: 'BOU', team: 'BOU', element_type: 3, pos: 'MID', now_cost: 5.6, form: '6.2', total_points: 48, selected_by_percent: '18.9', status: 'a', chance_of_playing_next_round: 100, news: '', xG: '0.34', xA: '0.12', xGI: '0.46', xP: '5.3', csOdds: 'N/A', penTaker: false, nextFixtures: [ { opp: 'SOU (H)', diff: 1 }, { opp: 'LEI (A)', diff: 2 }, { opp: 'ARS (H)', diff: 4 }, { opp: 'AVL (A)', diff: 4 } ] },
+
+  // FWDs
+  { id: 401, web_name: 'Haaland', team_code: 'MCI', team: 'MCI', element_type: 4, pos: 'FWD', now_cost: 15.4, form: '9.8', total_points: 112, selected_by_percent: '73.1', status: 'a', chance_of_playing_next_round: 100, news: '', xG: '0.92', xA: '0.15', xGI: '1.07', xP: '9.5', csOdds: 'N/A', penTaker: true, nextFixtures: [ { opp: 'NEW (A)', diff: 3 }, { opp: 'FUL (H)', diff: 2 }, { opp: 'WOL (A)', diff: 2 }, { opp: 'SOU (H)', diff: 1 } ] },
+  { id: 402, web_name: 'Watkins', team_code: 'AVL', team: 'AVL', element_type: 4, pos: 'FWD', now_cost: 9.1, form: '7.4', total_points: 69, selected_by_percent: '32.3', status: 'a', chance_of_playing_next_round: 100, news: '', xG: '0.55', xA: '0.28', xGI: '0.83', xP: '6.8', csOdds: 'N/A', penTaker: true, nextFixtures: [ { opp: 'IPS (A)', diff: 2 }, { opp: 'MUN (H)', diff: 3 }, { opp: 'FUL (A)', diff: 3 }, { opp: 'BOU (H)', diff: 2 } ] },
+  { id: 403, web_name: 'Solanke', team_code: 'TOT', team: 'TOT', element_type: 4, pos: 'FWD', now_cost: 7.6, form: '6.5', total_points: 49, selected_by_percent: '14.2', status: 'a', chance_of_playing_next_round: 100, news: '', xG: '0.45', xA: '0.14', xGI: '0.59', xP: '5.9', csOdds: 'N/A', penTaker: false, nextFixtures: [ { opp: 'MUN (A)', diff: 4 }, { opp: 'BHA (A)', diff: 3 }, { opp: 'WHU (H)', diff: 3 }, { opp: 'CRY (A)', diff: 2 } ] },
+  { id: 404, web_name: 'Wood', team_code: 'NFO', team: 'NFO', element_type: 4, pos: 'FWD', now_cost: 6.4, form: '7.9', total_points: 67, selected_by_percent: '22.8', status: 'a', chance_of_playing_next_round: 100, news: '', xG: '0.51', xA: '0.08', xGI: '0.59', xP: '6.2', csOdds: 'N/A', penTaker: true, nextFixtures: [ { opp: 'FUL (H)', diff: 3 }, { opp: 'CHE (A)', diff: 4 }, { opp: 'CRY (H)', diff: 2 }, { opp: 'LEI (A)', diff: 2 } ] },
+  { id: 405, web_name: 'Wissa', team_code: 'BRE', team: 'BRE', element_type: 4, pos: 'FWD', now_cost: 6.1, form: '0.0', total_points: 19, selected_by_percent: '2.4', status: 'i', chance_of_playing_next_round: 0, news: 'Knee injury - Out for 3-4 weeks', xG: '0.38', xA: '0.10', xGI: '0.48', xP: '0.0', csOdds: 'N/A', penTaker: false, nextFixtures: [ { opp: 'WHU (H)', diff: 3 }, { opp: 'WOL (A)', diff: 2 }, { opp: 'MUN (A)', diff: 4 }, { opp: 'IPS (H)', diff: 2 } ] },
+];
+
+export default function App() {
+  // ... existing auth & core state ...
+  const [user, setUser] = useState(null);
+  const [authModalOpen, setAuthModalOpen] = useState(false);
+  const [authMode, setAuthMode] = useState('login');
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const [authError, setAuthError] = useState(null);
+
+  const [players, setPlayers] = useState(INITIAL_FALLBACK_PLAYERS);
+  const [isFetchingData, setIsFetchingData] = useState(false);
+  const [dataLastUpdated, setDataLastUpdated] = useState(new Date().toLocaleTimeString());
+  
+  const [squad, setSquad] = useState({
+    starting: DEFAULT_STARTING_SQUAD,
+    bench: DEFAULT_BENCH_SQUAD,
+    captain: 401,
+    viceCaptain: 301
+  });
+
+  const [currentGW, setCurrentGW] = useState(12);
+  const [activeTab, setActiveTab] = useState('ai_assistant'); // 'ai_assistant', 'demo_squad', 'fact_hub', 'news', 'fdt'
+  
+  // Gemini AI Assistant State
+  const [aiQuery, setAiQuery] = useState('');
+  const [aiLoading, setAiLoading] = useState(false);
+  const [chatHistory, setChatHistory] = useState([
+    {
+      sender: 'assistant',
+      text: "👋 Welcome to Dezian FPL Predictions! I am your AI FPL Advisor. Ask me anything—from captain probability, transfer targets, expected points ($xP$), clean sheet odds, to injury updates!"
+    }
+  ]);
+
+  // Market & Probability Hub filters
+  const [searchQuery, setSearchQuery] = useState('');
+  const [posFilter, setPosFilter] = useState('ALL');
+  const [teamFilter, setTeamFilter] = useState('ALL');
+  const [maxPriceFilter, setMaxPriceFilter] = useState(15.5);
+  const [sortBy, setSortBy] = useState('xP');
+
+  const [activeChips, setActiveChips] = useState({
+    wildcard: false,
+    freehit: false,
+    benchboost: false,
+    triplecaptain: false
+  });
+
+  const [notification, setNotification] = useState(null);
+
+  const showToast = (msg, type = 'info') => {
+    setNotification({ msg, type });
+    setTimeout(() => setNotification(null), 3500);
+  };
+
+  // Auth Handlers
+  useEffect(() => {
+    if (!auth) return;
+    const unsubscribe = onAuthStateChanged(auth, (u) => {
+      setUser(u);
+    });
+    return () => unsubscribe();
+  }, []);
+
+  const handleLogout = async () => {
+    if (auth) {
+      await signOut(auth);
+      showToast("Signed out successfully.", "info");
+    }
+  };
+
+  const handleSaveSquadToCloud = async () => {
+    if (!db || !user) {
+      showToast("Demo Squad saved locally! Log in to sync to Cloud.", "success");
+      return;
+    }
+    try {
+      const docRef = doc(db, 'artifacts', appId, 'users', user.uid, 'squads', 'current');
+      await setDoc(docRef, { squad, activeChips, updatedAt: new Date().toISOString() });
+      showToast("Squad synced to cloud storage!", "success");
+    } catch (e) {
+      console.error(e);
+      showToast("Cloud sync failed. Local state saved.", "error");
+    }
+  };
+
+  const handleSelectCaptain = (playerId, type = 'C') => {
+    if (type === 'C') {
+      setSquad(prev => ({
+        ...prev,
+        captain: playerId,
+        viceCaptain: prev.viceCaptain === playerId ? (prev.starting.find(id => id !== playerId) || prev.viceCaptain) : prev.viceCaptain
+      }));
+      showToast("New Captain designated!", "success");
+    } else {
+      setSquad(prev => ({
+        ...prev,
+        viceCaptain: playerId,
+        captain: prev.captain === playerId ? (prev.starting.find(id => id !== playerId) || prev.captain) : prev.captain
+      }));
+      showToast("New Vice-Captain designated!", "success");
+    }
+  };
+
+  const getFdrBg = (diff) => {
+    switch(diff) {
+      case 1: return 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/40';
+      case 2: return 'bg-teal-500/20 text-teal-300 border border-teal-500/40';
+      case 3: return 'bg-amber-500/20 text-amber-300 border border-amber-500/40';
+      case 4: return 'bg-orange-500/20 text-orange-300 border border-orange-500/40';
+      case 5: return 'bg-red-500/20 text-red-300 border border-red-500/40';
+      default: return 'bg-slate-800 text-slate-300';
+    }
+  };
+
+  // --- GEMINI AI ASSISTANT FETCH ---
+  const handleSendAiQuery = async (queryText = aiQuery) => {
+    const textToSend = queryText.trim();
+    if (!textToSend || aiLoading) return;
+
+    // Push user question to history
+    const newHistory = [...chatHistory, { sender: 'user', text: textToSend }];
+    setChatHistory(newHistory);
+    setAiQuery('');
+    setAiLoading(true);
+
+    try {
+      const apiKey = ""; // Canvas auto-injects key at runtime
+      const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-3-flash-preview:generateContent?key=${apiKey}`;
+
+      const systemPrompt = `You are Dezian FPL Predictions, a world-class Fantasy Premier League (FPL) Probability Advisor & Analytical Expert created by Denzel Mwangi. 
+You provide concise, highly factual, mathematical, and data-driven FPL advice.
+Format your responses using bullet points and clear bold headings. Include stats like expected goals (xG), expected assists (xA), fixture difficulty (FDR), and clean sheet odds where relevant.
+Current Gameweek Context: GW${currentGW}. Top form players: Haaland (MCI, £15.4M), Palmer (CHE, £10.8M), Salah (LIV, £12.7M), Saka (ARS, £10.1M).`;
+
+      const payload = {
+        contents: [
+          { role: 'user', parts: [{ text: textToSend }] }
+        ],
+        systemInstruction: {
+          parts: [{ text: systemPrompt }]
+        }
+      };
+
+      const response = await fetch(apiUrl, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+      });
+
+      const result = await response.json();
+      const candidate = result.candidates?.[0];
+      const replyText = candidate?.content?.parts?.[0]?.text || "I was unable to analyze that query right now. Please try rephrasing your FPL question!";
+
+      setChatHistory(prev => [...prev, { sender: 'assistant', text: replyText }]);
+    } catch (err) {
+      console.error("Gemini AI fetch error:", err);
+      setChatHistory(prev => [...prev, { 
+        sender: 'assistant', 
+        text: "Sorry, I ran into a network error while computing your FPL probabilities. Please try again!" 
+      }]);
+    } finally {
+      setAiLoading(false);
+    }
+  };
+
+  // Quick Preset AI Questions
+  const PRESET_QUESTIONS = [
+    "Should I sell Saka for Cole Palmer?",
+    "Who is the best captain pick for GW12?",
+    "What are the clean sheet odds for Arsenal and Man City?",
+    "Explain how Expected Points (xP) is calculated",
+    "Which budget defenders have the best upcoming fixtures?"
+  ];
+
+  const allPlayersMap = useMemo(() => new Map(players.map(p => [p.id, p])), [players]);
+
+  const startingPlayers = useMemo(() => squad.starting.map(id => allPlayersMap.get(id)).filter(Boolean), [squad.starting, allPlayersMap]);
+  const benchPlayers = useMemo(() => squad.bench.map(id => allPlayersMap.get(id)).filter(Boolean), [squad.bench, allPlayersMap]);
+  const fullSquadList = useMemo(() => [...startingPlayers, ...benchPlayers], [startingPlayers, benchPlayers]);
+
+  const pitchLines = useMemo(() => {
+    return {
+      GK: startingPlayers.filter(p => p.pos === 'GK'),
+      DEF: startingPlayers.filter(p => p.pos === 'DEF'),
+      MID: startingPlayers.filter(p => p.pos === 'MID'),
+      FWD: startingPlayers.filter(p => p.pos === 'FWD')
+    };
+  }, [startingPlayers]);
+
+  const totalSquadCost = useMemo(() => fullSquadList.reduce((acc, p) => acc + (p?.now_cost || 0), 0), [fullSquadList]);
+  const remainingBudget = useMemo(() => (100.0 - totalSquadCost).toFixed(1), [totalSquadCost]);
+
+  // Squad Probabilities Calculation Engine
+  const squadCalculatedPXP = useMemo(() => {
+    let totalXp = startingPlayers.reduce((acc, p) => acc + parseFloat(p?.xP || 0), 0);
+    const capObj = allPlayersMap.get(squad.captain);
+    if (capObj) {
+      const mult = activeChips.triplecaptain ? 2 : 1;
+      totalXp += parseFloat(capObj.xP || 0) * mult;
+    }
+    if (activeChips.benchboost) {
+      totalXp += benchPlayers.reduce((acc, p) => acc + parseFloat(p?.xP || 0), 0);
+    }
+    return totalXp.toFixed(1);
+  }, [startingPlayers, benchPlayers, squad.captain, activeChips, allPlayersMap]);
+
+  const winProbabilityPercent = useMemo(() => {
+    const avgForm = startingPlayers.reduce((acc, p) => acc + parseFloat(p?.form || 0), 0) / (startingPlayers.length || 1);
+    return Math.min(96, Math.max(42, Math.round(avgForm * 9.5))).toFixed(0);
+  }, [startingPlayers]);
+
+  // Render Header & Tab Navigation
+  return (
+    <div className="min-h-screen bg-slate-950 text-slate-100 font-sans antialiased pb-12 selection:bg-purple-500 selection:text-slate-950">
+      
+      {/* Toast Notification */}
+      {notification && (
+        <div className={`fixed top-4 right-4 z-50 flex items-center space-x-2 px-4 py-3 rounded-xl shadow-2xl border text-xs sm:text-sm font-medium transition-all ${
+          notification.type === 'error' ? 'bg-red-950 border-red-500 text-red-200' :
+          notification.type === 'success' ? 'bg-emerald-950 border-emerald-500 text-emerald-200' :
+          'bg-slate-900 border-purple-500 text-purple-200'
+        }`}>
+          <Info className="w-4 h-4 shrink-0" />
+          <span>{notification.msg}</span>
+        </div>
+      )}
+
+      {/* Main Header */}
+      <header className="sticky top-0 z-40 bg-slate-900/90 backdrop-blur-md border-b border-slate-800 shadow-lg">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+          <div className="flex items-center justify-between h-16">
+            
+            <div className="flex items-center space-x-3">
+              <div className="h-10 w-10 rounded-xl bg-gradient-to-tr from-purple-600 via-indigo-500 to-emerald-400 flex items-center justify-center shadow-lg shadow-purple-500/20">
+                <Percent className="w-5 h-5 text-slate-950 stroke-[3]" />
+              </div>
+              <div>
+                <div className="flex items-center space-x-2">
+                  <h1 className="text-base sm:text-lg font-bold bg-gradient-to-r from-purple-400 via-teal-300 to-emerald-400 bg-clip-text text-transparent">
+                    Dezian FPL Predictions
+                  </h1>
+                  {/* AUTHOR BADGE */}
+                  <span className="hidden sm:inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-black bg-purple-500/20 text-purple-300 border border-purple-500/40 tracking-wider uppercase">
+                    MADE BY DENZEL MWANGI
+                  </span>
+                </div>
+                <div className="flex items-center space-x-2 text-[10px] text-slate-400 font-mono">
+                  <span className="flex items-center text-emerald-400">
+                    <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse mr-1" />
+                    GEMINI AI PROBABILITIES
+                  </span>
+                  <span>• GW{currentGW}</span>
+                  <span className="sm:hidden text-purple-300 font-bold">• DENZEL MWANGI</span>
+                </div>
+              </div>
+            </div>
+
+            {/* User Controls */}
+            <div className="flex items-center space-x-3">
+              {user && !user.isAnonymous ? (
+                <div className="flex items-center space-x-2">
+                  <div className="bg-slate-800 border border-slate-700 rounded-xl px-3 py-1 flex items-center space-x-2">
+                    <UserCheck className="w-4 h-4 text-emerald-400" />
+                    <span className="text-xs font-mono font-medium text-slate-200 truncate max-w-[120px]">{user.email}</span>
+                  </div>
+                  <button onClick={handleLogout} className="p-2 bg-slate-800 hover:bg-red-950 text-slate-400 hover:text-red-300 rounded-lg border border-slate-700">
+                    <LogOut className="w-4 h-4" />
+                  </button>
+                </div>
+              ) : (
+                <button
+                  onClick={() => { setAuthMode('login'); setAuthModalOpen(true); }}
+                  className="flex items-center space-x-1.5 px-3 py-1.5 rounded-lg bg-purple-600/20 hover:bg-purple-600/30 text-purple-300 border border-purple-500/40 text-xs font-bold"
+                >
+                  <LogIn className="w-3.5 h-3.5" />
+                  <span>Login / Cloud Sync</span>
+                </button>
+              )}
+            </div>
+
+          </div>
+        </div>
+      </header>
+
+      {/* Navigation Bar */}
+      <div className="bg-slate-900/60 border-b border-slate-800 backdrop-blur-sm sticky top-16 z-30">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 flex overflow-x-auto no-scrollbar space-x-2 py-2">
+          {[
+            { id: 'ai_assistant', label: 'Gemini AI Advisor Bar', icon: MessageSquare },
+            { id: 'demo_squad', label: 'Mode A: Demo Team Probabilities', icon: PieChart },
+            { id: 'fact_hub', label: 'Mode B: Fact-Based Stat Hub', icon: BarChart2 },
+            { id: 'news', label: 'Injuries & Flags', icon: Activity },
+            { id: 'fdt', label: 'Fixture Difficulty Ticker', icon: Calendar },
+          ].map(tab => {
+            const Icon = tab.icon;
+            const isActive = activeTab === tab.id;
+            return (
+              <button
+                key={tab.id}
+                onClick={() => setActiveTab(tab.id)}
+                className={`flex items-center space-x-2 px-3.5 py-2 rounded-xl text-xs sm:text-sm font-medium shrink-0 transition-all ${
+                  isActive 
+                    ? 'bg-purple-600/20 text-purple-300 border border-purple-500/40 shadow-sm font-semibold' 
+                    : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/60'
+                }`}
+              >
+                <Icon className={`w-4 h-4 ${isActive ? 'text-purple-400' : 'text-slate-400'}`} />
+                <span>{tab.label}</span>
+              </button>
+            );
+          })}
+        </div>
+      </div>
+
+      {/* Body Content */}
+      <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 mt-6">
+
+        {/* TAB 1: GEMINI AI ASSISTANT SEARCH BAR */}
+        {activeTab === 'ai_assistant' && (
+          <div className="space-y-6">
+            
+            {/* Banner */}
+            <div className="bg-gradient-to-r from-purple-950 via-slate-900 to-indigo-950 border border-purple-500/40 rounded-3xl p-6 shadow-2xl relative overflow-hidden">
+              <div className="flex items-center justify-between mb-2">
+                <div className="flex items-center space-x-3">
+                  <Sparkles className="w-6 h-6 text-purple-400 animate-pulse" />
+                  <h2 className="text-lg font-bold text-white">Dezian FPL Interactive Knowledge Engine</h2>
+                </div>
+                <span className="text-[10px] font-black text-emerald-400 bg-emerald-500/10 px-2.5 py-1 rounded-lg border border-emerald-500/30">
+                  BY DENZEL MWANGI
+                </span>
+              </div>
+              <p className="text-xs sm:text-sm text-slate-300 max-w-2xl">
+                Ask any question about transfers, captain probability, expected goal involvement ($xGI$), clean sheet odds, or tactical advice.
+              </p>
+
+              {/* Quick Prompt Chips */}
+              <div className="mt-4 flex flex-wrap gap-2">
+                <span className="text-[11px] font-bold text-slate-400 self-center mr-1">Quick Prompts:</span>
+                {PRESET_QUESTIONS.map((q, idx) => (
+                  <button
+                    key={idx}
+                    onClick={() => handleSendAiQuery(q)}
+                    className="text-xs bg-slate-900/80 hover:bg-purple-600/30 text-purple-200 border border-purple-500/30 px-3 py-1.5 rounded-xl transition-all"
+                  >
+                    {q}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {/* Chat Interaction Window */}
+            <div className="bg-slate-900 border border-slate-800 rounded-3xl p-4 sm:p-6 shadow-xl flex flex-col h-[520px]">
+              
+              {/* Message Feed */}
+              <div className="flex-1 overflow-y-auto space-y-4 pr-2 no-scrollbar">
+                {chatHistory.map((msg, i) => (
+                  <div
+                    key={i}
+                    className={`flex ${msg.sender === 'user' ? 'justify-end' : 'justify-start'}`}
+                  >
+                    <div className={`max-w-[85%] sm:max-w-[75%] rounded-2xl p-4 text-xs sm:text-sm shadow-md whitespace-pre-wrap leading-relaxed ${
+                      msg.sender === 'user' 
+                        ? 'bg-purple-600 text-white font-medium rounded-tr-none' 
+                        : 'bg-slate-950 border border-slate-800 text-slate-200 rounded-tl-none'
+                    }`}>
+                      {msg.sender === 'assistant' && (
+                        <div className="flex items-center justify-between text-purple-400 text-[10px] font-bold uppercase tracking-wider mb-2">
+                          <div className="flex items-center space-x-1.5">
+                            <Sparkles className="w-3.5 h-3.5" />
+                            <span>Dezian FPL Intelligence</span>
+                          </div>
+                          <span className="text-slate-500">DENZEL MWANGI</span>
+                        </div>
+                      )}
+                      {msg.text}
+                    </div>
+                  </div>
+                ))}
+                {aiLoading && (
+                  <div className="flex justify-start">
+                    <div className="bg-slate-950 border border-slate-800 text-purple-300 rounded-2xl p-4 text-xs flex items-center space-x-2">
+                      <RefreshCw className="w-4 h-4 animate-spin text-purple-400" />
+                      <span>Dezian FPL AI is calculating player probabilities & historical trends...</span>
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              {/* Question Input Box */}
+              <form 
+                onSubmit={(e) => { e.preventDefault(); handleSendAiQuery(); }}
+                className="mt-4 pt-3 border-t border-slate-800 flex items-center space-x-2"
+              >
+                <input
+                  type="text"
+                  placeholder="Ask anything (e.g. 'Is Watkins or Solanke better for GW12-16?')"
+                  value={aiQuery}
+                  onChange={(e) => setAiQuery(e.target.value)}
+                  className="flex-1 bg-slate-950 border border-slate-800 rounded-2xl px-4 py-3 text-xs sm:text-sm text-slate-100 placeholder-slate-500 focus:outline-none focus:border-purple-500"
+                />
+                <button
+                  type="submit"
+                  disabled={aiLoading || !aiQuery.trim()}
+                  className="px-5 py-3 bg-purple-600 hover:bg-purple-500 disabled:bg-slate-800 text-white rounded-2xl font-bold text-xs sm:text-sm shadow-lg transition-colors flex items-center space-x-1.5"
+                >
+                  <span>Ask AI</span>
+                  <Send className="w-4 h-4" />
+                </button>
+              </form>
+
+            </div>
+
+          </div>
+        )}
+
+        {/* TAB 2: MODE A - DEMO SQUAD PROBABILITY BUILDER */}
+        {activeTab === 'demo_squad' && (
+          <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
+            
+            {/* Left 8 Cols: Visual Pitch & Live Probabilities */}
+            <div className="lg:col-span-8 space-y-4">
+              
+              {/* Squad Probabilities Dashboard Banner */}
+              <div className="grid grid-cols-3 gap-3 bg-slate-900 border border-slate-800 rounded-2xl p-4 shadow-md">
+                <div className="bg-slate-950 p-3 rounded-xl border border-slate-800/80 text-center">
+                  <span className="text-[10px] text-slate-400 uppercase font-bold block">Squad Proj xP</span>
+                  <span className="text-xl font-black text-purple-400 font-mono">{squadCalculatedPXP}</span>
+                  <span className="text-[9px] text-slate-500 block mt-0.5">Expected Points Next GW</span>
+                </div>
+                <div className="bg-slate-950 p-3 rounded-xl border border-slate-800/80 text-center">
+                  <span className="text-[10px] text-slate-400 uppercase font-bold block">Win Probability</span>
+                  <span className="text-xl font-black text-emerald-400 font-mono">{winProbabilityPercent}%</span>
+                  <span className="text-[9px] text-slate-500 block mt-0.5">Based on Form Rating</span>
+                </div>
+                <div className="bg-slate-950 p-3 rounded-xl border border-slate-800/80 text-center">
+                  <span className="text-[10px] text-slate-400 uppercase font-bold block">Bank Remaining</span>
+                  <span className={`text-xl font-black font-mono ${parseFloat(remainingBudget) < 0 ? 'text-red-400' : 'text-slate-200'}`}>
+                    £{remainingBudget}M
+                  </span>
+                  <span className="text-[9px] text-slate-500 block mt-0.5">Max £100.0M Limit</span>
+                </div>
+              </div>
+
+              {/* Visual Grass Pitch */}
+              <div className="relative rounded-3xl border-2 border-slate-800 bg-gradient-to-b from-emerald-950/90 via-emerald-900/60 to-teal-950/90 p-4 sm:p-6 shadow-2xl min-h-[560px] flex flex-col justify-between overflow-hidden">
+                <div className="absolute inset-0 opacity-15 pointer-events-none bg-[radial-gradient(#ffffff_1px,transparent_1px)] [background-size:16px_16px]" />
+                
+                {['GK', 'DEF', 'MID', 'FWD'].map((rowPos) => {
+                  const playersInRow = pitchLines[rowPos];
+                  return (
+                    <div key={rowPos} className="relative z-10 flex justify-around items-center my-2">
+                      {playersInRow.map((player) => {
+                        const isCaptain = squad.captain === player.id;
+                        const isVice = squad.viceCaptain === player.id;
+                        return (
+                          <div key={player.id} className="flex flex-col items-center">
+                            
+                            <div className="flex items-center space-x-1 mb-1">
+                              <button
+                                onClick={() => handleSelectCaptain(player.id, 'C')}
+                                className={`w-5 h-5 rounded-full text-[10px] font-black flex items-center justify-center ${
+                                  isCaptain ? 'bg-amber-400 text-slate-950' : 'bg-slate-800 text-slate-400'
+                                }`}
+                              >
+                                C
+                              </button>
+                            </div>
+
+                            <div className="w-14 sm:w-16 h-12 sm:h-14 bg-slate-900 border-2 border-slate-700 rounded-t-2xl flex flex-col items-center justify-center shadow-lg">
+                              <span className="text-[10px] font-bold text-purple-400 uppercase">{player.team}</span>
+                              <span className="text-xs font-bold text-slate-100">{player.pos}</span>
+                            </div>
+
+                            <div className="w-20 sm:w-24 bg-slate-900/95 border border-slate-700 rounded-b-xl py-1 px-1 text-center shadow-md">
+                              <div className="text-xs font-bold truncate text-slate-100">{player.web_name}</div>
+                              <div className="flex items-center justify-between text-[10px] px-1 mt-0.5">
+                                <span className="text-emerald-400 font-mono">£{player.now_cost}</span>
+                                <span className="text-purple-300 font-bold">{player.xP} xP</span>
+                              </div>
+                            </div>
+
+                          </div>
+                        );
+                      })}
+                    </div>
+                  );
+                })}
+
+                {/* Bench */}
+                <div className="relative z-10 mt-4 pt-3 border-t border-emerald-500/30 bg-slate-950/70 rounded-2xl p-3">
+                  <div className="text-xs font-bold uppercase tracking-wider text-emerald-400 mb-2">Substitutes Bench</div>
+                  <div className="grid grid-cols-4 gap-2">
+                    {benchPlayers.map((player) => (
+                      <div key={player.id} className="flex flex-col items-center p-2 rounded-xl bg-slate-900 border border-slate-800">
+                        <span className="text-xs font-bold truncate text-slate-200">{player.web_name}</span>
+                        <span className="text-[10px] text-purple-300 font-mono">{player.xP} xP</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+
+              </div>
+
+            </div>
+
+            {/* Right 4 Cols: Probability Optimizations */}
+            <div className="lg:col-span-4 space-y-4">
+              <div className="bg-slate-900 border border-slate-800 rounded-2xl p-5 shadow-lg space-y-4">
+                <h3 className="text-sm font-bold text-slate-200 uppercase tracking-wider flex items-center justify-between">
+                  <span>Transfer Probability Rating</span>
+                  <Target className="w-4 h-4 text-purple-400" />
+                </h3>
+
+                <div className="space-y-3">
+                  <div>
+                    <div className="flex justify-between text-xs mb-1">
+                      <span className="text-slate-400">Attacking Return Likelihood</span>
+                      <span className="text-emerald-400 font-bold font-mono">78%</span>
+                    </div>
+                    <div className="w-full bg-slate-950 h-2 rounded-full overflow-hidden border border-slate-800">
+                      <div className="bg-emerald-400 h-full w-[78%]" />
+                    </div>
+                  </div>
+
+                  <div>
+                    <div className="flex justify-between text-xs mb-1">
+                      <span className="text-slate-400">Clean Sheet Odds</span>
+                      <span className="text-purple-400 font-bold font-mono">54%</span>
+                    </div>
+                    <div className="w-full bg-slate-950 h-2 rounded-full overflow-hidden border border-slate-800">
+                      <div className="bg-purple-400 h-full w-[54%]" />
+                    </div>
+                  </div>
+                </div>
+
+                <div className="pt-3 border-t border-slate-800">
+                  <button
+                    onClick={handleSaveSquadToCloud}
+                    className="w-full py-2.5 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-bold text-xs transition-colors flex items-center justify-center space-x-1.5"
+                  >
+                    <Save className="w-4 h-4" />
+                    <span>Save Demo Team to Cloud</span>
+                  </button>
+                </div>
+              </div>
+            </div>
+
+          </div>
+        )}
+
+        {/* TAB 3: MODE B - FACT-BASED STATISTICAL & PROBABILITY HUB */}
+        {activeTab === 'fact_hub' && (
+          <div className="space-y-6">
+            
+            <div className="bg-slate-900 border border-slate-800 rounded-2xl p-5 shadow-lg">
+              <h2 className="text-base font-bold text-slate-100 flex items-center mb-1">
+                <BarChart2 className="w-5 h-5 text-purple-400 mr-2" />
+                Fact-Based Objective Probability Hub
+              </h2>
+              <p className="text-xs text-slate-400">
+                Mathematical probability matrix calculated using expected goal involvement ($xGI$), penalty taker status, clean sheet odds, and fixture difficulty.
+              </p>
+            </div>
+
+            {/* Players Table */}
+            <div className="bg-slate-900 border border-slate-800 rounded-2xl p-4 shadow-xl overflow-x-auto">
+              <table className="w-full text-left text-xs">
+                <thead>
+                  <tr className="border-b border-slate-800 text-slate-400">
+                    <th className="py-2.5 px-3">Player</th>
+                    <th className="py-2.5 px-3">Pos / Team</th>
+                    <th className="py-2.5 px-3 font-mono">Price</th>
+                    <th className="py-2.5 px-3 font-mono">Expected Pts (xP)</th>
+                    <th className="py-2.5 px-3 font-mono">xG / 90</th>
+                    <th className="py-2.5 px-3 font-mono">xA / 90</th>
+                    <th className="py-2.5 px-3 font-mono">xGI / 90</th>
+                    <th className="py-2.5 px-3">Clean Sheet Odds</th>
+                    <th className="py-2.5 px-3">Penalties</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-800/60">
+                  {players.map((p) => (
+                    <tr key={p.id} className="hover:bg-slate-850 transition-colors">
+                      <td className="py-2.5 px-3 font-bold text-slate-100">{p.web_name}</td>
+                      <td className="py-2.5 px-3">
+                        <span className="px-2 py-0.5 rounded bg-slate-800 text-purple-300 font-bold">{p.team} • {p.pos}</span>
+                      </td>
+                      <td className="py-2.5 px-3 font-mono text-emerald-400 font-bold">£{p.now_cost}M</td>
+                      <td className="py-2.5 px-3 font-mono text-purple-400 font-bold">{p.xP} pts</td>
+                      <td className="py-2.5 px-3 font-mono text-slate-300">{p.xG}</td>
+                      <td className="py-2.5 px-3 font-mono text-slate-300">{p.xA}</td>
+                      <td className="py-2.5 px-3 font-mono font-bold text-amber-300">{p.xGI}</td>
+                      <td className="py-2.5 px-3 font-mono text-slate-300">{p.csOdds}</td>
+                      <td className="py-2.5 px-3">
+                        {p.penTaker ? (
+                          <span className="px-2 py-0.5 rounded bg-emerald-500/20 text-emerald-300 font-bold text-[10px]">Taker</span>
+                        ) : (
+                          <span className="text-slate-500 text-[10px]">-</span>
+                        )}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+
+          </div>
+        )}
+
+        {/* TAB 4: INJURIES & FLAGS */}
+        {activeTab === 'news' && (
+          <div className="space-y-6">
+            <div className="bg-slate-900 border border-slate-800 rounded-2xl p-5 shadow-lg">
+              <h2 className="text-base font-bold text-slate-100 flex items-center mb-1">
+                <Activity className="w-5 h-5 text-red-400 mr-2" />
+                Medical & Availability Probability Tracker
+              </h2>
+              <p className="text-xs text-slate-400">
+                Live official flags, suspension timelines, and percentage chance of playing in Gameweek {currentGW}.
+              </p>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              {players.filter(p => p.status !== 'a').map(flaggedPlayer => (
+                <div key={flaggedPlayer.id} className="bg-slate-900 border border-slate-800 rounded-2xl p-4 shadow-md flex items-start space-x-4">
+                  <div className="p-3 bg-slate-950 rounded-xl border border-slate-800 shrink-0">
+                    <AlertTriangle className="w-6 h-6 text-amber-400" />
+                  </div>
+                  <div>
+                    <span className="text-sm font-bold text-slate-100">{flaggedPlayer.web_name}</span>
+                    <span className="ml-2 text-xs px-2 py-0.5 rounded bg-slate-800 text-purple-300 font-bold">
+                      {flaggedPlayer.team}
+                    </span>
+                    <p className="text-xs text-slate-300 mt-2 bg-slate-950 p-2.5 rounded-xl border border-slate-800">
+                      {flaggedPlayer.news}
+                    </p>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* TAB 5: FIXTURE DIFFICULTY TICKER */}
+        {activeTab === 'fdt' && (
+          <div className="bg-slate-900 border border-slate-800 rounded-2xl p-5 shadow-lg space-y-4">
+            <h2 className="text-base font-bold text-slate-100 flex items-center">
+              <Calendar className="w-5 h-5 text-purple-400 mr-2" />
+              Upcoming Fixture Difficulty Rating (FDR Heatmap)
+            </h2>
+            <div className="overflow-x-auto">
+              <table className="w-full text-left text-xs">
+                <thead>
+                  <tr className="border-b border-slate-800 text-slate-400">
+                    <th className="py-2 px-3">Club</th>
+                    <th className="py-2 px-3 text-center">GW{currentGW}</th>
+                    <th className="py-2 px-3 text-center">GW{currentGW + 1}</th>
+                    <th className="py-2 px-3 text-center">GW{currentGW + 2}</th>
+                    <th className="py-2 px-3 text-center">GW{currentGW + 3}</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-800/60">
+                  {TEAMS_DATA.map((t) => (
+                    <tr key={t.id} className="hover:bg-slate-850">
+                      <td className="py-2.5 px-3 font-bold text-slate-200">{t.name}</td>
+                      {[2, 3, 2, 4].map((diff, idx) => (
+                        <td key={idx} className="py-2 px-3 text-center">
+                          <span className={`px-3 py-1 rounded-lg font-bold text-[10px] ${getFdrBg(diff)}`}>
+                            FDR {diff}
+                          </span>
+                        </td>
+                      ))}
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        )}
+
+      </main>
+    </div>
+  );
+}
+</html>
